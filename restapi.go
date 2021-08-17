@@ -21,9 +21,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"mime/multipart"
 	"net/http"
-	"net/textproto"
 	"net/url"
 	"strconv"
 	"strings"
@@ -276,6 +274,7 @@ func (s *Session) Logout() (err error) {
 // User returns the user details of the given userID
 // userID    : A user ID or "@me" which is a shortcut of current user ID
 func (s *Session) User(userID string) (st *User, err error) {
+
 	body, err := s.RequestWithBucketID("GET", EndpointUser(userID), nil, EndpointUsers)
 	if err != nil {
 		return
@@ -1572,55 +1571,12 @@ func (s *Session) ChannelMessageSendComplex(channelID string, data *MessageSend)
 
 	var response []byte
 	if len(files) > 0 {
-		body := &bytes.Buffer{}
-		bodywriter := multipart.NewWriter(body)
-
-		var payload []byte
-		payload, err = json.Marshal(data)
-		if err != nil {
-			return
+		contentType, body, encodeErr := MultipartBodyWithJSON(data, files)
+		if encodeErr != nil {
+			return st, encodeErr
 		}
 
-		var p io.Writer
-
-		h := make(textproto.MIMEHeader)
-		h.Set("Content-Disposition", `form-data; name="payload_json"`)
-		h.Set("Content-Type", "application/json")
-
-		p, err = bodywriter.CreatePart(h)
-		if err != nil {
-			return
-		}
-
-		if _, err = p.Write(payload); err != nil {
-			return
-		}
-
-		for i, file := range files {
-			h := make(textproto.MIMEHeader)
-			h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file%d"; filename="%s"`, i, quoteEscaper.Replace(file.Name)))
-			contentType := file.ContentType
-			if contentType == "" {
-				contentType = "application/octet-stream"
-			}
-			h.Set("Content-Type", contentType)
-
-			p, err = bodywriter.CreatePart(h)
-			if err != nil {
-				return
-			}
-
-			if _, err = io.Copy(p, file.Reader); err != nil {
-				return
-			}
-		}
-
-		err = bodywriter.Close()
-		if err != nil {
-			return
-		}
-
-		response, err = s.request("POST", endpoint, bodywriter.FormDataContentType(), body.Bytes(), endpoint, 0)
+		response, err = s.request("POST", endpoint, contentType, body, endpoint, 0)
 	} else {
 		response, err = s.RequestWithBucketID("POST", endpoint, data, endpoint)
 	}
@@ -1656,6 +1612,9 @@ func (s *Session) ChannelMessageSendEmbed(channelID string, embed *MessageEmbed)
 // content   : The message to send.
 // reference : The message reference to send.
 func (s *Session) ChannelMessageSendReply(channelID string, content string, reference *MessageReference) (*Message, error) {
+	if reference == nil {
+		return nil, fmt.Errorf("reply attempted with nil message reference")
+	}
 	return s.ChannelMessageSendComplex(channelID, &MessageSend{
 		Content:   content,
 		Reference: reference,
@@ -2175,55 +2134,12 @@ func (s *Session) WebhookExecute(webhookID, token string, wait bool, data *Webho
 
 	var response []byte
 	if len(data.Files) > 0 {
-		body := &bytes.Buffer{}
-		bodywriter := multipart.NewWriter(body)
-
-		var payload []byte
-		payload, err = json.Marshal(data)
-		if err != nil {
-			return
+		contentType, body, encodeErr := MultipartBodyWithJSON(data, data.Files)
+		if encodeErr != nil {
+			return st, encodeErr
 		}
 
-		var p io.Writer
-
-		h := make(textproto.MIMEHeader)
-		h.Set("Content-Disposition", `form-data; name="payload_json"`)
-		h.Set("Content-Type", "application/json")
-
-		p, err = bodywriter.CreatePart(h)
-		if err != nil {
-			return
-		}
-
-		if _, err = p.Write(payload); err != nil {
-			return
-		}
-
-		for i, file := range data.Files {
-			h := make(textproto.MIMEHeader)
-			h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file%d"; filename="%s"`, i, quoteEscaper.Replace(file.Name)))
-			contentType := file.ContentType
-			if contentType == "" {
-				contentType = "application/octet-stream"
-			}
-			h.Set("Content-Type", contentType)
-
-			p, err = bodywriter.CreatePart(h)
-			if err != nil {
-				return
-			}
-
-			if _, err = io.Copy(p, file.Reader); err != nil {
-				return
-			}
-		}
-
-		err = bodywriter.Close()
-		if err != nil {
-			return
-		}
-
-		response, err = s.request("POST", uri, bodywriter.FormDataContentType(), body.Bytes(), uri, 0)
+		response, err = s.request("POST", uri, contentType, body, uri, 0)
 	} else {
 		response, err = s.RequestWithBucketID("POST", uri, data, uri)
 	}
@@ -2252,22 +2168,40 @@ func (s *Session) WebhookMessage(webhookID, token, messageID string) (message *M
 	return
 }
 
-// WebhookMessageEdit edits a webhook message.
+// WebhookMessageEdit edits a webhook message and returns a new one.
 // webhookID : The ID of a webhook
 // token     : The auth token for the webhook
 // messageID : The ID of message to edit
-func (s *Session) WebhookMessageEdit(webhookID, token, messageID string, data *WebhookEdit) (err error) {
+func (s *Session) WebhookMessageEdit(webhookID, token, messageID string, data *WebhookEdit) (st *Message, err error) {
 	uri := EndpointWebhookMessage(webhookID, token, messageID)
 
-	_, err = s.RequestWithBucketID("PATCH", uri, data, EndpointWebhookToken("", ""))
+	var response []byte
+	if len(data.Files) > 0 {
+		contentType, body, err := MultipartBodyWithJSON(data, data.Files)
+		if err != nil {
+			return nil, err
+		}
 
+		response, err = s.request("PATCH", uri, contentType, body, uri, 0)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		response, err = s.RequestWithBucketID("PATCH", uri, data, EndpointWebhookToken("", ""))
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	err = unmarshal(response, &st)
 	return
 }
 
 // WebhookMessageDelete deletes a webhook message.
 // webhookID : The ID of a webhook
 // token     : The auth token for the webhook
-// messageID : The ID of message to edit
+// messageID : The ID of a message to edit
 func (s *Session) WebhookMessageDelete(webhookID, token, messageID string) (err error) {
 	uri := EndpointWebhookMessage(webhookID, token, messageID)
 
@@ -2624,11 +2558,19 @@ func (s *Session) ApplicationCommandPermissionsBatchEdit(appID, guildID string, 
 // appID       : The application ID.
 // interaction : Interaction instance.
 // resp        : Response message data.
-func (s *Session) InteractionRespond(interaction *Interaction, resp *InteractionResponse) error {
+func (s *Session) InteractionRespond(interaction *Interaction, resp *InteractionResponse) (err error) {
 	endpoint := EndpointInteractionResponse(interaction.ID, interaction.Token)
 
-	_, err := s.RequestWithBucketID("POST", endpoint, *resp, endpoint)
+	if resp.Data != nil && len(resp.Data.Files) > 0 {
+		contentType, body, err := MultipartBodyWithJSON(resp, resp.Data.Files)
+		if err != nil {
+			return err
+		}
 
+		_, err = s.request("POST", endpoint, contentType, body, endpoint, 0)
+	} else {
+		_, err = s.RequestWithBucketID("POST", endpoint, *resp, endpoint)
+	}
 	return err
 }
 
@@ -2643,7 +2585,7 @@ func (s *Session) InteractionResponse(appID string, interaction *Interaction) (*
 // appID       : The application ID.
 // interaction : Interaction instance.
 // newresp     : Updated response message data.
-func (s *Session) InteractionResponseEdit(appID string, interaction *Interaction, newresp *WebhookEdit) error {
+func (s *Session) InteractionResponseEdit(appID string, interaction *Interaction, newresp *WebhookEdit) (*Message, error) {
 	return s.WebhookMessageEdit(appID, interaction.Token, "@original", newresp)
 }
 
@@ -2672,7 +2614,7 @@ func (s *Session) FollowupMessageCreate(appID string, interaction *Interaction, 
 // interaction : Interaction instance.
 // messageID   : The followup message ID.
 // data        : Data to update the message
-func (s *Session) FollowupMessageEdit(appID string, interaction *Interaction, messageID string, data *WebhookEdit) error {
+func (s *Session) FollowupMessageEdit(appID string, interaction *Interaction, messageID string, data *WebhookEdit) (*Message, error) {
 	return s.WebhookMessageEdit(appID, interaction.Token, messageID, data)
 }
 

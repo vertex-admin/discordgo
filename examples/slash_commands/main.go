@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -38,6 +39,10 @@ var (
 			// Commands/options without description will fail the registration
 			// of the command.
 			Description: "Basic command",
+		},
+		{
+			Name:        "basic-command-with-files",
+			Description: "Basic command with files",
 		},
 		{
 			Name:        "options",
@@ -160,6 +165,21 @@ var (
 				},
 			})
 		},
+		"basic-command-with-files": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Hey there! Congratulations, you just executed your first slash command with a file in the response",
+					Files: []*discordgo.File{
+						{
+							ContentType: "text/plain",
+							Name:        "test.txt",
+							Reader:      strings.NewReader("Hello Discord!!"),
+						},
+					},
+				},
+			})
+		},
 		"options": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 			margs := []interface{}{
 				// Here we need to convert raw interface{} value to wanted type.
@@ -270,7 +290,7 @@ var (
 				return
 			}
 			time.AfterFunc(time.Second*5, func() {
-				err = s.InteractionResponseEdit(s.State.User.ID, i.Interaction, &discordgo.WebhookEdit{
+				_, err = s.InteractionResponseEdit(s.State.User.ID, i.Interaction, &discordgo.WebhookEdit{
 					Content: content + "\n\nWell, now you know how to create and edit responses. " +
 						"But you still don't know how to delete them... so... wait 10 seconds and this " +
 						"message will be deleted.",
