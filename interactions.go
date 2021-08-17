@@ -16,12 +16,13 @@ const InteractionDeadline = time.Second * 3
 
 // ApplicationCommand represents an application's slash command.
 type ApplicationCommand struct {
-	ID            string                      `json:"id,omitempty"`
-	ApplicationID string                      `json:"application_id,omitempty"`
-	Name          string                      `json:"name"`
-	Description   string                      `json:"description,omitempty"`
-	Version       string                      `json:"version,omitempty"`
-	Options       []*ApplicationCommandOption `json:"options"`
+	ID                string                      `json:"id,omitempty"`
+	ApplicationID     string                      `json:"application_id,omitempty"`
+	Name              string                      `json:"name"`
+	Description       string                      `json:"description,omitempty"`
+	DefaultPermission bool                        `json:"default_permission"`
+	Version           string                      `json:"version,omitempty"`
+	Options           []*ApplicationCommandOption `json:"options"`
 }
 
 // ApplicationCommandOptionType indicates the type of a slash command's option.
@@ -58,6 +59,35 @@ type ApplicationCommandOptionChoice struct {
 	Name  string      `json:"name"`
 	Value interface{} `json:"value"`
 }
+
+// ApplicationCommandPermissions represents a single user or role permission for a command.
+type ApplicationCommandPermissions struct {
+	ID         string                           `json:"id"`
+	Type       ApplicationCommandPermissionType `json:"type"`
+	Permission bool                             `json:"permission"`
+}
+
+// ApplicationCommandPermissionsList represents a list of ApplicationCommandPermissions, needed for serializing to JSON.
+type ApplicationCommandPermissionsList struct {
+	Permissions []*ApplicationCommandPermissions `json:"permissions"`
+}
+
+// GuildApplicationCommandPermissions represents all permissions for a single guild command.
+type GuildApplicationCommandPermissions struct {
+	ID            string                           `json:"id"`
+	ApplicationID string                           `json:"application_id"`
+	GuildID       string                           `json:"guild_id"`
+	Permissions   []*ApplicationCommandPermissions `json:"permissions"`
+}
+
+// ApplicationCommandPermissionType indicates whether a permission is user or role based.
+type ApplicationCommandPermissionType uint8
+
+// Application command permission types.
+const (
+	ApplicationCommandPermissionTypeRole ApplicationCommandPermissionType = 1
+	ApplicationCommandPermissionTypeUser ApplicationCommandPermissionType = 2
+)
 
 // InteractionType indicates the type of an interaction event.
 type InteractionType uint8

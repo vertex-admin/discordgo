@@ -399,9 +399,10 @@ type MessageApplication struct {
 
 // MessageReference contains reference data sent with crossposted messages
 type MessageReference struct {
-	MessageID string `json:"message_id"`
-	ChannelID string `json:"channel_id"`
-	GuildID   string `json:"guild_id,omitempty"`
+	MessageID       string `json:"message_id"`
+	ChannelID       string `json:"channel_id"`
+	GuildID         string `json:"guild_id,omitempty"`
+	FailIfNotExists bool   `json:"fail_if_not_exists"`
 }
 
 // Reference returns MessageReference of given message
