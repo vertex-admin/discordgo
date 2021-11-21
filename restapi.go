@@ -1552,10 +1552,21 @@ var quoteEscaper = strings.NewReplacer("\\", "\\\\", `"`, "\\\"")
 // channelID : The ID of a Channel.
 // data      : The message struct to send.
 func (s *Session) ChannelMessageSendComplex(channelID string, data *MessageSend) (st *Message, err error) {
-	if data.Embed != nil && data.Embed.Type == "" {
-		data.Embed.Type = "rich"
+	// TODO: Remove this when compatibility is not required.
+	if data.Embed != nil {
+		if data.Embeds == nil {
+			data.Embeds = []*MessageEmbed{data.Embed}
+		} else {
+			err = fmt.Errorf("cannot specify both Embed and Embeds")
+			return
+		}
 	}
 
+	for _, embed := range data.Embeds {
+		if embed.Type == "" {
+			embed.Type = "rich"
+		}
+	}
 	endpoint := EndpointChannelMessages(channelID)
 
 	// TODO: Remove this when compatibility is not required.
@@ -1602,8 +1613,15 @@ func (s *Session) ChannelMessageSendTTS(channelID string, content string) (*Mess
 // channelID : The ID of a Channel.
 // embed     : The embed data to send.
 func (s *Session) ChannelMessageSendEmbed(channelID string, embed *MessageEmbed) (*Message, error) {
+	return s.ChannelMessageSendEmbeds(channelID, []*MessageEmbed{embed})
+}
+
+// ChannelMessageSendEmbeds sends a message to the given channel with multiple embedded data.
+// channelID : The ID of a Channel.
+// embeds    : The embeds data to send.
+func (s *Session) ChannelMessageSendEmbeds(channelID string, embeds []*MessageEmbed) (*Message, error) {
 	return s.ChannelMessageSendComplex(channelID, &MessageSend{
-		Embed: embed,
+		Embeds: embeds,
 	})
 }
 
@@ -1633,10 +1651,21 @@ func (s *Session) ChannelMessageEdit(channelID, messageID, content string) (*Mes
 // ChannelMessageEditComplex edits an existing message, replacing it entirely with
 // the given MessageEdit struct
 func (s *Session) ChannelMessageEditComplex(m *MessageEdit) (st *Message, err error) {
-	if m.Embed != nil && m.Embed.Type == "" {
-		m.Embed.Type = "rich"
+	// TODO: Remove this when compatibility is not required.
+	if m.Embed != nil {
+		if m.Embeds == nil {
+			m.Embeds = []*MessageEmbed{m.Embed}
+		} else {
+			err = fmt.Errorf("cannot specify both Embed and Embeds")
+			return
+		}
 	}
 
+	for _, embed := range m.Embeds {
+		if embed.Type == "" {
+			embed.Type = "rich"
+		}
+	}
 	response, err := s.RequestWithBucketID("PATCH", EndpointChannelMessage(m.Channel, m.ID), m, EndpointChannelMessage(m.Channel, ""))
 	if err != nil {
 		return
@@ -1651,7 +1680,15 @@ func (s *Session) ChannelMessageEditComplex(m *MessageEdit) (st *Message, err er
 // messageID : The ID of a Message
 // embed     : The embed data to send
 func (s *Session) ChannelMessageEditEmbed(channelID, messageID string, embed *MessageEmbed) (*Message, error) {
-	return s.ChannelMessageEditComplex(NewMessageEdit(channelID, messageID).SetEmbed(embed))
+	return s.ChannelMessageEditEmbeds(channelID, messageID, []*MessageEmbed{embed})
+}
+
+// ChannelMessageEditEmbeds edits an existing message with multiple embedded data.
+// channelID : The ID of a Channel
+// messageID : The ID of a Message
+// embeds    : The embeds data to send
+func (s *Session) ChannelMessageEditEmbeds(channelID, messageID string, embeds []*MessageEmbed) (*Message, error) {
+	return s.ChannelMessageEditComplex(NewMessageEdit(channelID, messageID).SetEmbeds(embeds))
 }
 
 // ChannelMessageDelete deletes a message from the Channel.
@@ -2492,65 +2529,6 @@ func (s *Session) ApplicationCommands(appID, guildID string) (cmd []*Application
 
 	err = unmarshal(body, &cmd)
 
-	return
-}
-
-// GuildApplicationCommandsPermissions receives all permissions for application commands that have any permissions
-// appID       : The application ID
-// guildID     : Guild ID to retrieve all guild-specific permissions for application commands in the guild, both global and guild specific
-func (s *Session) GuildApplicationCommandsPermissions(appID, guildID string) (permissions []*GuildApplicationCommandPermissions, err error) {
-	endpoint := EndpointApplicationCommandsGuildPermissions(appID, guildID)
-
-	body, err := s.RequestWithBucketID("GET", endpoint, nil, endpoint)
-	if err != nil {
-		return
-	}
-
-	err = unmarshal(body, &permissions)
-	return
-}
-
-// ApplicationCommandPermissions receives all permissions for application commands that have any permissions
-// appID       : The Application ID
-// guildID     : The guild ID containing the application command
-// cmdID       : The command ID to retrieve the permissions of
-func (s *Session) ApplicationCommandPermissions(appID, guildID, cmdID string) (permissions *GuildApplicationCommandPermissions, err error) {
-	endpoint := EndpointApplicationCommandPermissions(appID, guildID, cmdID)
-
-	body, err := s.RequestWithBucketID("GET", endpoint, nil, endpoint)
-	if err != nil {
-		return
-	}
-
-	err = unmarshal(body, &permissions)
-	return
-}
-
-// ApplicationCommandPermissionsEdit edits the permissions of an application command
-// appID       : The Application ID
-// guildID     : The guild ID containing the application command
-// cmdID       : The command ID to edit the permissions of
-// permissions : An object containing a list of permissions for the application command
-func (s *Session) ApplicationCommandPermissionsEdit(appID, guildID, cmdID string, permissions *ApplicationCommandPermissionsList) (err error) {
-	endpoint := EndpointApplicationCommandPermissions(appID, guildID, cmdID)
-
-	_, err = s.RequestWithBucketID("PUT", endpoint, permissions, endpoint)
-	return
-}
-
-// ApplicationCommandPermissionsBatchEdit edits the permissions of a batch of commands
-// appID       : The Application ID
-// guildID     : The guild ID to batch edit commands of
-// permissions : A list of permissions paired with a command ID, guild ID, and application ID per application command
-func (s *Session) ApplicationCommandPermissionsBatchEdit(appID, guildID string, permissions []*GuildApplicationCommandPermissions) (perms []*GuildApplicationCommandPermissions, err error) {
-	endpoint := EndpointApplicationCommandsGuildPermissions(appID, guildID)
-
-	body, err := s.RequestWithBucketID("PUT", endpoint, permissions, endpoint)
-	if err != nil {
-		return
-	}
-
-	err = unmarshal(body, &perms)
 	return
 }
 
