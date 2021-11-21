@@ -40,6 +40,10 @@ type User struct {
 	// to retrieve the avatar itself.
 	Avatar string `json:"avatar"`
 
+	// The hash of the user's banner, if they have one.
+	Banner      string `json:"banner"`
+	AccentColor int    `json:"accent_color"`
+
 	// The user's chosen language option.
 	Locale string `json:"locale"`
 
@@ -98,6 +102,21 @@ func (u *User) AvatarURL(size string) string {
 		URL = EndpointUserAvatarAnimated(u.ID, u.Avatar)
 	} else {
 		URL = EndpointUserAvatar(u.ID, u.Avatar)
+	}
+
+	if size != "" {
+		return URL + "?size=" + size
+	}
+	return URL
+}
+
+func (u *User) BannerURL(size string) string {
+	var URL string
+
+	if strings.HasPrefix(u.Banner, "a_") {
+		URL = EndpointUserBannerAnimated(u.ID, u.Banner)
+	} else {
+		URL = EndpointUserBanner(u.ID, u.Banner)
 	}
 
 	if size != "" {

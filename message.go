@@ -38,7 +38,8 @@ const (
 	MessageTypeGuildDiscoveryDisqualified            MessageType = 14
 	MessageTypeGuildDiscoveryRequalified             MessageType = 15
 	MessageTypeReply                                 MessageType = 19
-	MessageTypeApplicationCommand                    MessageType = 20
+	MessageTypeChatInputCommand                      MessageType = 20
+	MessageTypeContextMenuCommand                    MessageType = 23
 )
 
 // A Message stores all data related to a specific Discord message.
@@ -120,7 +121,9 @@ type Message struct {
 	// Is sent with Rich Presence-related chat embeds
 	Application *MessageApplication `json:"application"`
 
-	// MessageReference contains reference data sent with crossposted messages
+	// MessageReference contains reference data sent with crossposted or reply messages.
+	// This does not contain the reference *to* this message; this is for when *this* message references another.
+	// To generate a reference to this message, use (*Message).Reference().
 	MessageReference *MessageReference `json:"message_reference"`
 
 	// The flags of the message, which describe extra features of a message.
@@ -399,9 +402,10 @@ type MessageApplication struct {
 
 // MessageReference contains reference data sent with crossposted messages
 type MessageReference struct {
-	MessageID string `json:"message_id"`
-	ChannelID string `json:"channel_id"`
-	GuildID   string `json:"guild_id,omitempty"`
+	MessageID       string `json:"message_id"`
+	ChannelID       string `json:"channel_id"`
+	GuildID         string `json:"guild_id,omitempty"`
+	FailIfNotExists bool   `json:"fail_if_not_exists"`
 }
 
 // Reference returns MessageReference of given message
